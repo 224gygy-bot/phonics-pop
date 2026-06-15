@@ -1207,6 +1207,22 @@ button:active {
 .pet-container.idle { animation: petIdle 2.2s ease-in-out infinite; }
 .pet-container.success { animation: petSuccess 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) 2; }
 .pet-container.fail { animation: petFail 0.5s ease-in-out; }
+.app-version {
+  position: absolute;
+  top: 16px;
+  right: 18px;
+  font-size: 11px;
+  color: var(--text-light);
+  opacity: 0.75;
+  font-family: monospace;
+  pointer-events: none;
+  z-index: 1000;
+  background: rgba(255, 255, 255, 0.55);
+  padding: 3px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  backdrop-filter: blur(4px);
+}
 </style>
 </head>
 <body>
@@ -1225,6 +1241,7 @@ button:active {
 
 <!-- ===== CHARACTER SELECTION ===== -->
 <div class="screen child-select-screen" id="screen-child-select">
+  <div class="app-version">v2.1.0</div>
   <div class="child-select-title">🎯 파닉스팝! 🎯</div>
   <div class="child-select-subtitle">파닉스 공부할 친구를 골라봐!</div>
   <div class="pet-cards">
@@ -1344,6 +1361,7 @@ button:active {
       <div class="stage-map-subtitle">단계를 터치해서 게임을 골라보세요!</div>
     </div>
     <div class="stage-list" id="stage-list"></div>
+    <div class="app-version" style="position:static;text-align:center;margin-top:30px;margin-bottom:10px;">v2.1.0</div>
   </div>
 </div>
 
@@ -1876,35 +1894,35 @@ const SoundEffects = {
 // Phonetic respellings for English TTS to pronounce pure phoneme sounds
 const ENGLISH_PHONICS_SOUNDS = {
   's': 'ssss',
-  'a': 'ah',
-  't': 't',
-  'p': 'p',
+  'a': 'aah',
+  't': 't ',
+  'p': 'p ',
   'i': 'ih',
-  'n': 'n',
-  'c': 'k',
-  'k': 'k',
+  'n': 'n ',
+  'c': 'k ',
+  'k': 'k ',
   'e': 'eh',
-  'h': 'h',
+  'h': 'h ',
   'r': 'rr',
-  'm': 'mm',
-  'd': 'd',
-  'g': 'g',
+  'm': 'm ',
+  'd': 'd ',
+  'g': 'g ',
   'o': 'ah',
   'u': 'uh',
-  'l': 'l',
-  'f': 'f',
-  'b': 'b',
-  'j': 'j',
-  'v': 'v',
-  'w': 'w',
-  'x': 'ks',
-  'y': 'y',
-  'z': 'z',
-  'qu': 'kw',
+  'l': 'l ',
+  'f': 'f ',
+  'b': 'b ',
+  'j': 'j ',
+  'v': 'v ',
+  'w': 'w ',
+  'x': 'ks ',
+  'y': 'y ',
+  'z': 'z ',
+  'qu': 'kw ',
   'sh': 'shhh',
-  'ch': 'ch',
-  'th': 'th',
-  'ng': 'ng',
+  'ch': 'ch ',
+  'th': 'th ',
+  'ng': 'ng ',
   'a_e': 'ay',
   'i_e': 'eye',
   'o_e': 'oh',
@@ -1924,10 +1942,10 @@ const ENGLISH_PHONICS_SOUNDS = {
   'oi': 'oy',
   'oy': 'oy',
   'aw': 'aw',
-  'bl': 'bl',
-  'st': 'st',
-  'gr': 'gr',
-  'nd': 'nd'
+  'bl': 'bl ',
+  'st': 'st ',
+  'gr': 'gr ',
+  'nd': 'nd '
 };
 
 function getEnglishLetterName(letter) {
@@ -3027,10 +3045,23 @@ document.addEventListener('DOMContentLoaded', () => {
   updateCoinDisplay();
   updateRewardProgressBar();
   
-  // Register service worker
+  // Register service worker with auto-reload on update
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('service-worker.js')
-      .then(reg => console.log('SW Registered', reg))
+      .then(reg => {
+        console.log('SW Registered', reg);
+        reg.addEventListener('updatefound', () => {
+          const newWorker = reg.installing;
+          if (newWorker) {
+            newWorker.addEventListener('statechange', () => {
+              if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                console.log('New update installed. Reloading page...');
+                window.location.reload();
+              }
+            });
+          }
+        });
+      })
       .catch(err => console.error('SW Registration failed', err));
   }
   
