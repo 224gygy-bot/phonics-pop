@@ -2040,25 +2040,91 @@ function selectBestVoice(lang) {
   return matchingVoices[0];
 }
 
-function speakQueue(text, lang, rate) {
+let audioQueue = [];
+let currentAudio = null;
+
+function clearAudioQueue() {
+  audioQueue = [];
+  if (currentAudio) {
+    currentAudio.pause();
+    currentAudio = null;
+  }
+}
+
+function cancelAllSpeech() {
+  clearAudioQueue();
+  if (window.speechSynthesis) {
+    window.speechSynthesis.cancel();
+  }
+}
+
+function playAudioQueue(queue) {
+  cancelAllSpeech();
+  audioQueue = queue;
+  playNextInQueue();
+}
+
+function playNextInQueue() {
+  if (audioQueue.length === 0) {
+    currentAudio = null;
+    return;
+  }
+  
+  const item = audioQueue.shift();
+  
+  if (navigator.onLine) {
+    let url = '';
+    const cleanText = item.text.replace(/~/g, '');
+    if (item.lang.startsWith('ko')) {
+      url = `https://translate.google.com/translate_tts?ie=UTF-8&tl=ko&client=tw-ob&q=${encodeURIComponent(cleanText)}`;
+    } else {
+      url = `https://translate.google.com/translate_tts?ie=UTF-8&tl=en&client=tw-ob&q=${encodeURIComponent(cleanText)}`;
+    }
+    
+    const audio = new Audio(url);
+    currentAudio = audio;
+    
+    if (item.rate && item.rate < 0.75) {
+      audio.playbackRate = 0.75;
+    }
+    
+    audio.onended = () => {
+      playNextInQueue();
+    };
+    
+    audio.onerror = (e) => {
+      console.warn("Online neural TTS failed, falling back to local TTS:", e);
+      speakLocal(item.text, item.lang, item.rate);
+      setTimeout(playNextInQueue, (item.text.length * 120) + 600);
+    };
+    
+    audio.play().catch(err => {
+      console.warn("Audio play blocked or failed, falling back to local TTS:", err);
+      speakLocal(item.text, item.lang, item.rate);
+      setTimeout(playNextInQueue, (item.text.length * 120) + 600);
+    });
+  } else {
+    speakLocal(item.text, item.lang, item.rate);
+    const duration = (item.text.length * 120) + 600;
+    setTimeout(playNextInQueue, duration);
+  }
+}
+
+function speakLocal(text, lang, rate) {
   if(!window.speechSynthesis) return;
   const u = new SpeechSynthesisUtterance(text);
   u.lang = lang || 'ko-KR';
   u.rate = rate || 0.85;
   u.pitch = 1.05;
-  
   const voice = selectBestVoice(u.lang);
   if (voice) {
     u.voice = voice;
   }
-  
   window.speechSynthesis.speak(u);
 }
 
 function speak(text, lang, rate) {
-  if(!window.speechSynthesis) return;
-  window.speechSynthesis.cancel();
-  speakQueue(text, lang, rate);
+  playAudioQueue([{ text: text, lang: lang || 'ko-KR', rate: rate }]);
 }
 
 function speakPhonics(letter) {
@@ -2066,10 +2132,6 @@ function speakPhonics(letter) {
   if(!p) {
     speak(letter, 'en-US', 0.7);
     return;
-  }
-  
-  if(window.speechSynthesis) {
-    window.speechSynthesis.cancel();
   }
   
   const engLetter = getEnglishLetterName(letter);
@@ -2080,57 +2142,49 @@ function speakPhonics(letter) {
   const engWord = parts[0];
   const korWord = parts[1] || '';
   
-  // Korean grammar helper (은/는)
   const lastChar = korName.charCodeAt(korName.length - 1);
   const hasJongseong = (lastChar - 0xAC00) % 28 > 0;
   const postposition = hasJongseong ? '은' : '는';
   
-  // Sequenced Bilingual Phonics Playback
-  speakQueue(engLetter, 'en-US', 0.8);
-  speakQueue(korName + postposition, 'ko-KR', 0.85);
+  const queue = [
+    { text: engLetter, lang: 'en-US', rate: 0.8 },
+    { text: korName + postposition, lang: 'ko-KR', rate: 0.85 },
+    { text: `${soundText}, ${soundText}, ${soundText}`, lang: 'en-US', rate: 0.65 },
+    { text: engWord, lang: 'en-US', rate: 0.8 }
+  ];
   
-  // Play the phonics sound slowly, 3 times
-  speakQueue(soundText + ', ' + soundText + ', ' + soundText, 'en-US', 0.65);
-  
-  // Play the example word
-  speakQueue(engWord, 'en-US', 0.8);
-  
-  // Play the translation
   if (korWord) {
-    speakQueue(korWord, 'ko-KR', 0.85);
+    queue.push({ text: korWord, lang: 'ko-KR', rate: 0.85 });
   }
+  
+  playAudioQueue(queue);
 }
 
 function speakWordBlend(word) {
   const w = word.toLowerCase();
-  
-  if(window.speechSynthesis) {
-    window.speechSynthesis.cancel();
-  }
-  
   const blend = WORD_BLENDS[w];
   if(!blend) {
-    speakQueue(w, 'en-US', 0.75);
+    speak(w, 'en-US', 0.75);
     return;
   }
   
   const phonemes = segmentWordToPhonics(w);
+  const queue = [];
   
-  // 1. Sound out each phoneme individually in English, slow and clear
   phonemes.forEach(ph => {
     const phSound = ENGLISH_PHONICS_SOUNDS[ph] || ph;
-    speakQueue(phSound, 'en-US', 0.6);
+    queue.push({ text: phSound, lang: 'en-US', rate: 0.6 });
   });
   
-  // 2. Blend and speak the full word in English
-  speakQueue(w, 'en-US', 0.8);
+  queue.push({ text: w, lang: 'en-US', rate: 0.8 });
   
-  // 3. Speak the Korean phonetic pronunciation helper
   const fullParts = blend.full.split(' ');
   const korPronunciation = fullParts[1] || '';
   if (korPronunciation) {
-    speakQueue(korPronunciation, 'ko-KR', 0.85);
+    queue.push({ text: korPronunciation, lang: 'ko-KR', rate: 0.85 });
   }
+  
+  playAudioQueue(queue);
 }
 
 function playPhonicsSound(item, type) {
@@ -2738,6 +2792,9 @@ function placeBuilderTile(letter, tileEl) {
     slots[nextEmptyIdx].classList.add('filled');
     tileEl.classList.add('used');
     SoundEffects.playPop();
+    
+    // Speak the letter name in native voice (e.g. T -> "Tee", I -> "Eye")
+    speak(getEnglishLetterName(letter), 'en-US', 0.85);
 
     if (builderFilledSlots.length === q.letters.length) {
       S.session.score++;
@@ -2749,13 +2806,15 @@ function placeBuilderTile(letter, tileEl) {
       document.getElementById('builder-feedback').className = 'quiz-feedback correct';
       triggerPetReaction('builder', true);
       
-      setTimeout(() => speakWordBlend(q.word), 200);
+      // Delay word blend sound to let the last letter audio finish
+      setTimeout(() => speakWordBlend(q.word), 800);
       
+      // Delay moving to the next question to let the child hear the blend
       setTimeout(() => {
         S.session.currentIdx++;
         if (S.session.currentIdx >= S.session.questions.length) endSession();
         else loadBuilderQuestion();
-      }, 2000);
+      }, 2600);
     }
   } else {
     tileEl.style.animation = 'shake 0.4s ease';
