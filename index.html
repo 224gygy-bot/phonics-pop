@@ -1241,7 +1241,7 @@ button:active {
 
 <!-- ===== CHARACTER SELECTION ===== -->
 <div class="screen child-select-screen" id="screen-child-select">
-  <div class="app-version">v2.3.0</div>
+  <div class="app-version">v2.4.0</div>
   <div class="child-select-title">🎯 파닉스팝! 🎯</div>
   <div class="child-select-subtitle">파닉스 공부할 친구를 골라봐!</div>
   <div class="pet-cards">
@@ -1361,7 +1361,7 @@ button:active {
       <div class="stage-map-subtitle">단계를 터치해서 게임을 골라보세요!</div>
     </div>
     <div class="stage-list" id="stage-list"></div>
-    <div class="app-version" style="position:static;text-align:center;margin-top:30px;margin-bottom:10px;">v2.3.0</div>
+    <div class="app-version" style="position:static;text-align:center;margin-top:30px;margin-bottom:10px;">v2.4.0</div>
   </div>
 </div>
 
@@ -2108,87 +2108,29 @@ function selectBestVoice(lang) {
   return matchingVoices[0];
 }
 
-let audioQueue = [];
-let currentAudio = null;
-
-function clearAudioQueue() {
-  audioQueue = [];
-  if (currentAudio) {
-    currentAudio.pause();
-    currentAudio = null;
-  }
-}
-
-function cancelAllSpeech() {
-  clearAudioQueue();
-  if (window.speechSynthesis) {
-    window.speechSynthesis.cancel();
-  }
-}
-
 function playAudioQueue(queue) {
-  cancelAllSpeech();
-  audioQueue = queue;
-  playNextInQueue();
-}
-
-function playNextInQueue() {
-  if (audioQueue.length === 0) {
-    currentAudio = null;
-    return;
-  }
+  if (!window.speechSynthesis) return;
   
-  const item = audioQueue.shift();
+  // Cancel current speech to flush the queue
+  window.speechSynthesis.cancel();
   
-  if (navigator.onLine) {
-    let url = '';
-    const cleanText = item.text.replace(/~/g, '');
-    if (item.lang.startsWith('ko')) {
-      url = `https://translate.google.com/translate_tts?ie=UTF-8&tl=ko&client=tw-ob&q=${encodeURIComponent(cleanText)}`;
-    } else {
-      url = `https://translate.google.com/translate_tts?ie=UTF-8&tl=en&client=tw-ob&q=${encodeURIComponent(cleanText)}`;
-    }
-    
-    const audio = new Audio(url);
-    currentAudio = audio;
-    
-    if (item.rate && item.rate < 0.75) {
-      audio.playbackRate = 0.75;
-    }
-    
-    audio.onended = () => {
-      playNextInQueue();
-    };
-    
-    audio.onerror = (e) => {
-      console.warn("Online neural TTS failed, falling back to local TTS:", e);
-      speakLocal(item.text, item.lang, item.rate);
-      setTimeout(playNextInQueue, (item.text.length * 120) + 600);
-    };
-    
-    audio.play().catch(err => {
-      console.warn("Audio play blocked or failed, falling back to local TTS:", err);
-      speakLocal(item.text, item.lang, item.rate);
-      setTimeout(playNextInQueue, (item.text.length * 120) + 600);
+  // A small timeout is critical for Chromium browsers to successfully flush 
+  // the speech queue before registering new utterances. Otherwise, it stays silent.
+  setTimeout(() => {
+    queue.forEach(item => {
+      if (!item.text) return;
+      const u = new SpeechSynthesisUtterance(item.text);
+      u.lang = item.lang || 'ko-KR';
+      u.rate = item.rate || 0.85;
+      u.pitch = 1.05;
+      
+      const voice = selectBestVoice(u.lang);
+      if (voice) {
+        u.voice = voice;
+      }
+      window.speechSynthesis.speak(u);
     });
-  } else {
-    speakLocal(item.text, item.lang, item.rate);
-    const duration = (item.text.length * 120) + 600;
-    setTimeout(playNextInQueue, duration);
-  }
-}
-
-function speakLocal(text, lang, rate) {
-  if(!window.speechSynthesis) return;
-  const u = new SpeechSynthesisUtterance(text);
-  u.lang = lang || 'ko-KR';
-  u.rate = rate || 0.85;
-  u.pitch = 1.05;
-  const voice = selectBestVoice(u.lang);
-  if (voice) {
-    u.voice = voice;
-  }
-  window.speechSynthesis.speak(u);
+  }, 100);
 }
 
 function speak(text, lang, rate) {
