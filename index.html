@@ -1873,14 +1873,192 @@ const SoundEffects = {
 // ============================================================
 // SPEECH SYNTHESIS ENGINE (TTS)
 // ============================================================
-function speak(text, lang, rate) {
+// Phonetic respellings for English TTS to pronounce pure phoneme sounds
+const ENGLISH_PHONICS_SOUNDS = {
+  's': 'ssss',
+  'a': 'ah',
+  't': 't',
+  'p': 'p',
+  'i': 'ih',
+  'n': 'n',
+  'c': 'k',
+  'k': 'k',
+  'e': 'eh',
+  'h': 'h',
+  'r': 'rr',
+  'm': 'mm',
+  'd': 'd',
+  'g': 'g',
+  'o': 'ah',
+  'u': 'uh',
+  'l': 'l',
+  'f': 'f',
+  'b': 'b',
+  'j': 'j',
+  'v': 'v',
+  'w': 'w',
+  'x': 'ks',
+  'y': 'y',
+  'z': 'z',
+  'qu': 'kw',
+  'sh': 'shhh',
+  'ch': 'ch',
+  'th': 'th',
+  'ng': 'ng',
+  'a_e': 'ay',
+  'i_e': 'eye',
+  'o_e': 'oh',
+  'u_e': 'yoo',
+  'ai': 'ay',
+  'ee': 'ee',
+  'oa': 'oh',
+  'ie': 'eye',
+  'oo': 'oo',
+  'ar': 'ar',
+  'or': 'or',
+  'er': 'er',
+  'ir': 'er',
+  'ur': 'er',
+  'ow': 'ow',
+  'ou': 'ow',
+  'oi': 'oy',
+  'oy': 'oy',
+  'aw': 'aw',
+  'bl': 'bl',
+  'st': 'st',
+  'gr': 'gr',
+  'nd': 'nd'
+};
+
+function getEnglishLetterName(letter) {
+  const l = letter.toLowerCase();
+  if (l === 'a_e') return 'A';
+  if (l === 'i_e') return 'I';
+  if (l === 'o_e') return 'O';
+  if (l === 'u_e') return 'U';
+  return l.replace('_', ' ').toUpperCase();
+}
+
+function segmentWordToPhonics(word) {
+  const w = word.toLowerCase();
+  
+  const specialSegments = {
+    'sat': ['s', 'a', 't'],
+    'pin': ['p', 'i', 'n'],
+    'tap': ['t', 'a', 'p'],
+    'nap': ['n', 'a', 'p'],
+    'tip': ['t', 'i', 'p'],
+    'cat': ['c', 'a', 't'],
+    'hen': ['h', 'e', 'n'],
+    'red': ['r', 'e', 'd'],
+    'mad': ['m', 'a', 'd'],
+    'kit': ['k', 'i', 't'],
+    'dog': ['d', 'o', 'g'],
+    'sun': ['s', 'u', 'n'],
+    'bus': ['b', 'u', 's'],
+    'log': ['l', 'o', 'g'],
+    'fun': ['f', 'u', 'n'],
+    'fox': ['f', 'o', 'x'],
+    'jam': ['j', 'a', 'm'],
+    'win': ['w', 'i', 'n'],
+    'zip': ['z', 'i', 'p'],
+    'ship': ['sh', 'i', 'p'],
+    'chip': ['ch', 'i', 'p'],
+    'that': ['th', 'a', 't'],
+    'ring': ['r', 'i', 'ng'],
+    'cake': ['c', 'a_e', 'k'],
+    'bike': ['b', 'i_e', 'k'],
+    'home': ['h', 'o_e', 'm'],
+    'cute': ['c', 'u_e', 't'],
+    'rain': ['r', 'ai', 'n'],
+    'feet': ['f', 'ee', 't'],
+    'boat': ['b', 'oa', 't'],
+    'pie': ['p', 'ie'],
+    'moon': ['m', 'oo', 'n'],
+    'car': ['c', 'ar'],
+    'fork': ['f', 'or', 'k'],
+    'bird': ['b', 'ir', 'd'],
+    'cow': ['c', 'ow'],
+    'out': ['ou', 't'],
+    'coin': ['c', 'oi', 'n'],
+    'paw': ['p', 'aw']
+  };
+  
+  if (specialSegments[w]) {
+    return specialSegments[w];
+  }
+  return w.split('');
+}
+
+let voicesCached = [];
+function getVoicesList() {
+  if (voicesCached.length > 0) return voicesCached;
+  if (!window.speechSynthesis) return [];
+  voicesCached = window.speechSynthesis.getVoices();
+  return voicesCached;
+}
+
+if (window.speechSynthesis) {
+  getVoicesList();
+  if (window.speechSynthesis.onvoiceschanged !== undefined) {
+    window.speechSynthesis.onvoiceschanged = () => {
+      voicesCached = window.speechSynthesis.getVoices();
+    };
+  }
+}
+
+function selectBestVoice(lang) {
+  const voices = getVoicesList();
+  if (voices.length === 0) return null;
+  
+  const targetLang = lang.toLowerCase();
+  const matchingVoices = voices.filter(v => v.lang.toLowerCase().startsWith(targetLang.split('-')[0]));
+  if (matchingVoices.length === 0) return null;
+  
+  // Premium/Natural voice keywords
+  const preferences = [
+    'natural',
+    'online',
+    'google',
+    'premium',
+    'samantha',
+    'yuna',
+    'heami',
+    'sun-hi',
+    'guy',
+    'aria'
+  ];
+  
+  for (const pref of preferences) {
+    const found = matchingVoices.find(v => v.name.toLowerCase().includes(pref));
+    if (found) return found;
+  }
+  
+  const defaultVoice = matchingVoices.find(v => v.default);
+  if (defaultVoice) return defaultVoice;
+  
+  return matchingVoices[0];
+}
+
+function speakQueue(text, lang, rate) {
   if(!window.speechSynthesis) return;
-  window.speechSynthesis.cancel();
   const u = new SpeechSynthesisUtterance(text);
   u.lang = lang || 'ko-KR';
   u.rate = rate || 0.85;
   u.pitch = 1.05;
+  
+  const voice = selectBestVoice(u.lang);
+  if (voice) {
+    u.voice = voice;
+  }
+  
   window.speechSynthesis.speak(u);
+}
+
+function speak(text, lang, rate) {
+  if(!window.speechSynthesis) return;
+  window.speechSynthesis.cancel();
+  speakQueue(text, lang, rate);
 }
 
 function speakPhonics(letter) {
@@ -1889,20 +2067,70 @@ function speakPhonics(letter) {
     speak(letter, 'en-US', 0.7);
     return;
   }
-  const text = p.phrase + '! ' + p.ex;
-  speak(text, 'ko-KR', 0.82);
+  
+  if(window.speechSynthesis) {
+    window.speechSynthesis.cancel();
+  }
+  
+  const engLetter = getEnglishLetterName(letter);
+  const korName = p.name;
+  const soundText = ENGLISH_PHONICS_SOUNDS[letter.toLowerCase()] || letter;
+  
+  const parts = p.ex.split(' ');
+  const engWord = parts[0];
+  const korWord = parts[1] || '';
+  
+  // Korean grammar helper (은/는)
+  const lastChar = korName.charCodeAt(korName.length - 1);
+  const hasJongseong = (lastChar - 0xAC00) % 28 > 0;
+  const postposition = hasJongseong ? '은' : '는';
+  
+  // Sequenced Bilingual Phonics Playback
+  speakQueue(engLetter, 'en-US', 0.8);
+  speakQueue(korName + postposition, 'ko-KR', 0.85);
+  
+  // Play the phonics sound slowly, 3 times
+  speakQueue(soundText + ', ' + soundText + ', ' + soundText, 'en-US', 0.65);
+  
+  // Play the example word
+  speakQueue(engWord, 'en-US', 0.8);
+  
+  // Play the translation
+  if (korWord) {
+    speakQueue(korWord, 'ko-KR', 0.85);
+  }
 }
 
 function speakWordBlend(word) {
   const w = word.toLowerCase();
+  
+  if(window.speechSynthesis) {
+    window.speechSynthesis.cancel();
+  }
+  
   const blend = WORD_BLENDS[w];
   if(!blend) {
-    speak(w, 'en-US', 0.75);
+    speakQueue(w, 'en-US', 0.75);
     return;
   }
-  const segmented = blend.sounds.join('-');
-  const text = segmented + '! ' + blend.full + '!';
-  speak(text, 'ko-KR', 0.78);
+  
+  const phonemes = segmentWordToPhonics(w);
+  
+  // 1. Sound out each phoneme individually in English, slow and clear
+  phonemes.forEach(ph => {
+    const phSound = ENGLISH_PHONICS_SOUNDS[ph] || ph;
+    speakQueue(phSound, 'en-US', 0.6);
+  });
+  
+  // 2. Blend and speak the full word in English
+  speakQueue(w, 'en-US', 0.8);
+  
+  // 3. Speak the Korean phonetic pronunciation helper
+  const fullParts = blend.full.split(' ');
+  const korPronunciation = fullParts[1] || '';
+  if (korPronunciation) {
+    speakQueue(korPronunciation, 'ko-KR', 0.85);
+  }
 }
 
 function playPhonicsSound(item, type) {
