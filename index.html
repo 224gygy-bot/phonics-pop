@@ -1241,7 +1241,7 @@ button:active {
 
 <!-- ===== CHARACTER SELECTION ===== -->
 <div class="screen child-select-screen" id="screen-child-select">
-  <div class="app-version">v2.1.0</div>
+  <div class="app-version">v2.2.0</div>
   <div class="child-select-title">🎯 파닉스팝! 🎯</div>
   <div class="child-select-subtitle">파닉스 공부할 친구를 골라봐!</div>
   <div class="pet-cards">
@@ -1361,7 +1361,7 @@ button:active {
       <div class="stage-map-subtitle">단계를 터치해서 게임을 골라보세요!</div>
     </div>
     <div class="stage-list" id="stage-list"></div>
-    <div class="app-version" style="position:static;text-align:center;margin-top:30px;margin-bottom:10px;">v2.1.0</div>
+    <div class="app-version" style="position:static;text-align:center;margin-top:30px;margin-bottom:10px;">v2.2.0</div>
   </div>
 </div>
 
@@ -2153,27 +2153,17 @@ function speakPhonics(letter) {
   }
   
   const engLetter = getEnglishLetterName(letter);
-  const korName = p.name;
   const soundText = ENGLISH_PHONICS_SOUNDS[letter.toLowerCase()] || letter;
   
   const parts = p.ex.split(' ');
   const engWord = parts[0];
-  const korWord = parts[1] || '';
   
-  const lastChar = korName.charCodeAt(korName.length - 1);
-  const hasJongseong = (lastChar - 0xAC00) % 28 > 0;
-  const postposition = hasJongseong ? '은' : '는';
-  
+  // Immersive English Audio (No Korean elements like '에스는' or '호랑이', play phoneme once)
   const queue = [
     { text: engLetter, lang: 'en-US', rate: 0.8 },
-    { text: korName + postposition, lang: 'ko-KR', rate: 0.85 },
-    { text: `${soundText}, ${soundText}, ${soundText}`, lang: 'en-US', rate: 0.65 },
+    { text: soundText, lang: 'en-US', rate: 0.65 },
     { text: engWord, lang: 'en-US', rate: 0.8 }
   ];
-  
-  if (korWord) {
-    queue.push({ text: korWord, lang: 'ko-KR', rate: 0.85 });
-  }
   
   playAudioQueue(queue);
 }
@@ -2189,18 +2179,14 @@ function speakWordBlend(word) {
   const phonemes = segmentWordToPhonics(w);
   const queue = [];
   
+  // 1. Sound out each phoneme individually in English (once each)
   phonemes.forEach(ph => {
     const phSound = ENGLISH_PHONICS_SOUNDS[ph] || ph;
     queue.push({ text: phSound, lang: 'en-US', rate: 0.6 });
   });
   
+  // 2. Blend and speak the full word in English (No Korean phonetic representation helper)
   queue.push({ text: w, lang: 'en-US', rate: 0.8 });
-  
-  const fullParts = blend.full.split(' ');
-  const korPronunciation = fullParts[1] || '';
-  if (korPronunciation) {
-    queue.push({ text: korPronunciation, lang: 'ko-KR', rate: 0.85 });
-  }
   
   playAudioQueue(queue);
 }
@@ -2790,11 +2776,11 @@ function loadBuilderQuestion() {
     tilesEl.appendChild(tile);
   });
   
-  setTimeout(() => speakWordBlend(q.word), 600);
+  setTimeout(() => speak(q.word, 'en-US', 0.8), 600);
 }
 
 function playCurrentBuilderSound() {
-  speakWordBlend(S.session.questions[S.session.currentIdx].word);
+  speak(S.session.questions[S.session.currentIdx].word, 'en-US', 0.8);
 }
 
 function placeBuilderTile(letter, tileEl) {
