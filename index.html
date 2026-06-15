@@ -1241,7 +1241,7 @@ button:active {
 
 <!-- ===== CHARACTER SELECTION ===== -->
 <div class="screen child-select-screen" id="screen-child-select">
-  <div class="app-version">v2.2.0</div>
+  <div class="app-version">v2.3.0</div>
   <div class="child-select-title">🎯 파닉스팝! 🎯</div>
   <div class="child-select-subtitle">파닉스 공부할 친구를 골라봐!</div>
   <div class="pet-cards">
@@ -1361,7 +1361,7 @@ button:active {
       <div class="stage-map-subtitle">단계를 터치해서 게임을 골라보세요!</div>
     </div>
     <div class="stage-list" id="stage-list"></div>
-    <div class="app-version" style="position:static;text-align:center;margin-top:30px;margin-bottom:10px;">v2.2.0</div>
+    <div class="app-version" style="position:static;text-align:center;margin-top:30px;margin-bottom:10px;">v2.3.0</div>
   </div>
 </div>
 
@@ -1957,6 +1957,56 @@ function getEnglishLetterName(letter) {
   return l.replace('_', ' ').toUpperCase();
 }
 
+const WORD_CHARACTER_SOUNDS = {
+  'sat': ['ssss', 'aah', 't '],
+  'pin': ['p ', 'ih', 'n '],
+  'tap': ['t ', 'aah', 'p '],
+  'nap': ['n ', 'aah', 'p '],
+  'tip': ['t ', 'ih', 'p '],
+  'cat': ['k ', 'aah', 't '],
+  'hen': ['h ', 'eh', 'n '],
+  'red': ['rr', 'eh', 'd '],
+  'mad': ['m ', 'aah', 'd '],
+  'kit': ['k ', 'ih', 't '],
+  'dog': ['d ', 'ah', 'g '],
+  'sun': ['ssss', 'uh', 'n '],
+  'bus': ['b ', 'uh', 'ssss'],
+  'log': ['l ', 'ah', 'g '],
+  'fun': ['f ', 'uh', 'n '],
+  'fox': ['f ', 'ah', 'ks '],
+  'jam': ['j ', 'aah', 'm '],
+  'win': ['w ', 'ih', 'n '],
+  'zip': ['z ', 'ih', 'p '],
+  'ship': ['shhh', 'shhh', 'ih', 'p '],
+  'chip': ['ch ', 'ch ', 'ih', 'p '],
+  'that': ['th ', 'th ', 'aah', 't '],
+  'ring': ['rr', 'ih', 'ng ', 'ng '],
+  'cake': ['k ', 'ay', 'k ', ''],
+  'bike': ['b ', 'eye', 'k ', ''],
+  'home': ['h ', 'oh', 'm ', ''],
+  'cute': ['k ', 'yoo', 't ', ''],
+  'rain': ['rr', 'ay', 'ay', 'n '],
+  'feet': ['f ', 'ee', 'ee', 't '],
+  'boat': ['b ', 'oh', 'oh', 't '],
+  'pie': ['p ', 'eye', 'eye'],
+  'moon': ['m ', 'oo', 'oo', 'n '],
+  'car': ['k ', 'ar', 'ar'],
+  'fork': ['f ', 'or', 'or', 'k '],
+  'bird': ['b ', 'er', 'er', 'd '],
+  'cow': ['k ', 'ow', 'ow'],
+  'out': ['ow', 'ow', 't '],
+  'coin': ['k ', 'oy', 'oy', 'n '],
+  'paw': ['p ', 'aw', 'aw']
+};
+
+function getWordCharacterSound(word, index, letter) {
+  const w = word.toLowerCase();
+  if (WORD_CHARACTER_SOUNDS[w] && WORD_CHARACTER_SOUNDS[w][index] !== undefined) {
+    return WORD_CHARACTER_SOUNDS[w][index];
+  }
+  return getEnglishLetterName(letter);
+}
+
 function segmentWordToPhonics(word) {
   const w = word.toLowerCase();
   
@@ -2153,14 +2203,21 @@ function speakPhonics(letter) {
   }
   
   const engLetter = getEnglishLetterName(letter);
+  const korName = p.name;
   const soundText = ENGLISH_PHONICS_SOUNDS[letter.toLowerCase()] || letter;
   
   const parts = p.ex.split(' ');
   const engWord = parts[0];
   
-  // Immersive English Audio (No Korean elements like '에스는' or '호랑이', play phoneme once)
+  // Korean grammar helper (은/는) for the letter name
+  const lastChar = korName.charCodeAt(korName.length - 1);
+  const hasJongseong = (lastChar - 0xAC00) % 28 > 0;
+  const postposition = hasJongseong ? '은' : '는';
+  
+  // Bilingual Phonics Playback
   const queue = [
     { text: engLetter, lang: 'en-US', rate: 0.8 },
+    { text: korName + postposition, lang: 'ko-KR', rate: 0.85 },
     { text: soundText, lang: 'en-US', rate: 0.65 },
     { text: engWord, lang: 'en-US', rate: 0.8 }
   ];
@@ -2797,8 +2854,11 @@ function placeBuilderTile(letter, tileEl) {
     tileEl.classList.add('used');
     SoundEffects.playPop();
     
-    // Speak the letter name in native voice (e.g. T -> "Tee", I -> "Eye")
-    speak(getEnglishLetterName(letter), 'en-US', 0.85);
+    // Speak the correct phonics sound of the letter in this word (e.g. I -> "ih" in pin)
+    const soundText = getWordCharacterSound(q.word, nextEmptyIdx, letter);
+    if (soundText) {
+      speak(soundText, 'en-US', 0.85);
+    }
 
     if (builderFilledSlots.length === q.letters.length) {
       S.session.score++;
